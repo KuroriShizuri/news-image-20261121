@@ -3,11 +3,13 @@
 
 Reads entry.png from this script's own directory. The file is a JPEG
 (the competition accepts a whole PNG or JPEG named entry.png) of
-exactly 1024x1024 pixels. Validates it (JPEG magic bytes and
-dimensions read from the SOF marker), copies it to
-$MAKEFUN_OUTPUT_DIR/entry.png (/output by default), then re-validates
-the copy itself (magic bytes and dimensions) and verifies it by file
-size and SHA-256 digest, printing the byte count and digest.
+exactly 1024x1024 pixels and at most 1 MiB. Validates it (JPEG magic
+bytes and dimensions read from the SOF marker), refuses it when it is
+over the 1 MiB cap, copies it to $MAKEFUN_OUTPUT_DIR/entry.png
+(/output by default) after checking the output directory is writable,
+then re-validates the copy itself (magic bytes and dimensions) and
+verifies it by file size and SHA-256 digest, printing the byte count
+and digest.
 
 Python 3.13, standard library only, no network.
 """
@@ -22,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(HERE, "entry.png")
 JPEG_MAGIC = b"\xff\xd8\xff"
 EXPECTED_SIZE = (1024, 1024)
+MAX_ENTRY_BYTES = 1048576  # competition cap: the image must be at most 1 MiB
 
 
 def read_dimensions(path):
@@ -65,10 +68,19 @@ def main():
             "entry.png must be 1024x1024, got %dx%d" % (width, height)
         )
     source_size = os.path.getsize(SOURCE)
+    if source_size > MAX_ENTRY_BYTES:
+        raise ValueError(
+            "entry.png is %d bytes, over the 1 MiB (%d byte) competition cap"
+            % (source_size, MAX_ENTRY_BYTES)
+        )
     source_hash = sha256_of(SOURCE)
 
     out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
     os.makedirs(out_dir, exist_ok=True)
+    if not os.path.isdir(out_dir) or not os.access(out_dir, os.W_OK):
+        raise ValueError(
+            "output directory %s is not a writable directory" % out_dir
+        )
     dest = os.path.join(out_dir, "entry.png")
     shutil.copyfile(SOURCE, dest)
 
